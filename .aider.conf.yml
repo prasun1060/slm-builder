@@ -23,15 +23,17 @@ aiderignore: .aiderignore
 auto-commits: false
 dirty-commits: false
 show-diffs: true
+show-repo-map: false
 
 pretty: true
 stream: true
-map-refresh: auto
-map-tokens: 2048
+map-refresh: files
+map-tokens: 256
+max-chat-history-tokens: 6000
 
 # Handy context that is useful in most sessions but should remain read-only.
 read:
-  - docs
+  - docs/CURRENT_TASK.md
 
 # Uncomment and adapt once the local toolchains are installed.
 # lint-cmd:
