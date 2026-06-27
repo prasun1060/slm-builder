@@ -1,0 +1,22 @@
+# Aider Configuration File
+
+# General settings
+general:
+  debug: false
+  verbose: true
+
+# File handling settings
+files:
+  ignore_patterns:
+    - "*.tmp"
+    - "*.log"
+  include_extensions:
+    - ".py"
+    - ".js"
+    - ".html"
+
+# Response settings
+response:
+  format: markdown
+  include_code_snippets: true
+  max_snippet_length: 1000
