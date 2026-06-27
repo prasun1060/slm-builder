@@ -1,0 +1,163 @@
+<main class="app-shell">
+  <aside class="sidebar">
+    <div>
+      <p class="eyebrow">SLM Builder</p>
+      <h1>RAG workspace</h1>
+      <p class="subtitle">Build a local knowledge pipeline around an Ollama model.</p>
+    </div>
+
+    <nav class="pipeline-list" aria-label="Pipelines">
+      <button
+        type="button"
+        *ngFor="let pipeline of pipelines()"
+        [class.active]="selectedPipelineId() === pipeline.id"
+        (click)="selectPipeline(pipeline.id)"
+      >
+        <span>{{ pipeline.name }}</span>
+        <small>{{ pipeline.vector_store_type }} · {{ pipeline.indexing_status }}</small>
+      </button>
+    </nav>
+  </aside>
+
+  <section class="workspace">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Selected pipeline</p>
+        <h2>{{ selectedPipeline()?.name || 'No pipeline yet' }}</h2>
+      </div>
+      <div class="status" [class.error]="error()">
+        {{ error() || status() }}
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="panel">
+        <h3>Model</h3>
+        <label>
+          Name
+          <input [(ngModel)]="modelForm.name" />
+        </label>
+        <label>
+          Ollama model id
+          <input [(ngModel)]="modelForm.model_id" />
+        </label>
+        <label>
+          Description
+          <textarea rows="3" [(ngModel)]="modelForm.description"></textarea>
+        </label>
+        <button type="button" class="primary" [disabled]="loading()" (click)="createModel()">
+          Save model
+        </button>
+      </section>
+
+      <section class="panel">
+        <h3>Pipeline</h3>
+        <label>
+          Name
+          <input [(ngModel)]="pipelineForm.name" />
+        </label>
+        <label>
+          Model
+          <select [(ngModel)]="pipelineForm.model_id">
+            <option [ngValue]="0">Choose model</option>
+            <option *ngFor="let model of models()" [ngValue]="model.id">
+              {{ model.name }} ({{ model.model_id }})
+            </option>
+          </select>
+        </label>
+        <label>
+          Vector database
+          <select [(ngModel)]="pipelineForm.vector_store_type">
+            <option value="chroma">Chroma local</option>
+            <option value="mongodb">MongoDB Atlas Vector Search</option>
+          </select>
+        </label>
+
+        <div class="mongo-fields" *ngIf="pipelineForm.vector_store_type === 'mongodb'">
+          <label>
+            URI
+            <input [(ngModel)]="pipelineForm.mongodb_uri" />
+          </label>
+          <label>
+            Database
+            <input [(ngModel)]="pipelineForm.mongodb_database" />
+          </label>
+          <label>
+            Collection
+            <input [(ngModel)]="pipelineForm.mongodb_collection" />
+          </label>
+          <label>
+            Index name
+            <input [(ngModel)]="pipelineForm.mongodb_index_name" />
+          </label>
+        </div>
+
+        <button type="button" class="primary" [disabled]="loading()" (click)="createPipeline()">
+          Create pipeline
+        </button>
+      </section>
+
+      <section class="panel wide">
+        <h3>Knowledge</h3>
+        <div class="two-column">
+          <div>
+            <label>
+              Title
+              <input [(ngModel)]="documentForm.title" />
+            </label>
+            <label>
+              Text
+              <textarea rows="8" [(ngModel)]="documentForm.content"></textarea>
+            </label>
+            <div class="button-row">
+              <button type="button" class="primary" [disabled]="loading()" (click)="addDocument()">
+                Add text
+              </button>
+              <label class="file-button">
+                Upload file
+                <input type="file" accept=".txt,.md" (change)="uploadDocument($event)" />
+              </label>
+              <button type="button" [disabled]="loading()" (click)="indexPipeline()">
+                Index
+              </button>
+            </div>
+          </div>
+          <div class="document-list">
+            <div *ngFor="let document of documents()" class="document-item">
+              <strong>{{ document.title }}</strong>
+              <span>{{ document.chunk_count }} chunks</span>
+            </div>
+            <p *ngIf="documents().length === 0" class="empty">Added documents appear here.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel wide">
+        <h3>Chat test</h3>
+        <label>
+          Question
+          <textarea rows="3" [(ngModel)]="chatForm.message"></textarea>
+        </label>
+        <button type="button" class="primary" [disabled]="loading()" (click)="sendMessage()">
+          Ask pipeline
+        </button>
+
+        <article class="answer" *ngIf="answer()">
+          <h4>Answer</h4>
+          <p>{{ answer() }}</p>
+        </article>
+
+        <div class="sources" *ngIf="chatSources().length > 0">
+          <h4>Sources</h4>
+          <div *ngFor="let source of chatSources()" class="source-item">
+            <strong>{{ source.title }}</strong>
+            <small>Score {{ source.score | number: '1.2-2' }}</small>
+            <p>{{ source.text }}</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+
+<router-outlet />

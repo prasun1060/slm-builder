@@ -1,0 +1,40 @@
+# Project-local Aider config for SLM Builder.
+# This is set up for a local llama.cpp OpenAI-compatible server.
+# Start llama.cpp server separately, for example on:
+#   C:\Users\Prasun Bhattacharyya\Documents\llama-cpp>build\llama-server -m models\qwen2.5-coder-7b-instruct-q4_k_m.gguf -c 8192 --jinja -ngl 99 -sm row --temp 0.6 --top-k 20 --top-p 0.95 --min-p 0 --no-context-shift --alias qwen2.5coder
+
+model: qwen2.5coder
+weak-model: qwen2.5coder
+alias:
+  - qwen2.5coder:openai/qwen2.5coder
+edit-format: diff
+
+openai-api-base: http://127.0.0.1:8080/v1
+show-model-warnings: false
+check-model-accepts-settings: false
+
+# Use git so Aider can build repo maps, show diffs, and support /commit.
+git: true
+gitignore: true
+aiderignore: .aiderignore
+
+# Keep Aider from making commits automatically. You can still ask Aider to
+# /commit when you want.
+auto-commits: false
+dirty-commits: false
+show-diffs: true
+
+pretty: true
+stream: true
+map-refresh: auto
+map-tokens: 2048
+
+# Handy context that is useful in most sessions but should remain read-only.
+read:
+  - docs
+
+# Uncomment and adapt once the local toolchains are installed.
+# lint-cmd:
+#   - "python: cd backend; ruff check ."
+#   - "typescript: cd frontend; npm run build"
+# test-cmd: "cd frontend; npm test -- --watch=false"
