@@ -25,10 +25,10 @@ Create an app that helps a user build a RAG-backed small language model experien
 ## Important Files
 
 - `backend/main.py`
-- `backend/app/database.py`
-- `backend/app/schemas/__init__.py`
-- `backend/app/routers/`
-- `backend/app/services/`
+- `backend/src/database.py`
+- `backend/src/schemas/__init__.py`
+- `backend/src/routers/`
+- `backend/src/services/`
 - `frontend/src/app/app.component.ts`
 - `frontend/src/app/app.component.html`
 - `frontend/src/app/app.component.css`
