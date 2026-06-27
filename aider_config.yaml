@@ -20,3 +20,12 @@ response:
   format: markdown
   include_code_snippets: true
   max_snippet_length: 1000
+
+# Documentation settings
+docs:
+  fetch_url: /web https://aider.chat/docs/usage/tips.html
+  include_sections:
+    - "To suggest changes to a file you MUST return the entire content of the updated file."
+    - "Every *file listing* MUST use this *file listing* format:"
+    - "To suggest changes to a file you MUST return a *file listing* that contains the entire content of the file."
+    - "NEVER* skip, omit or elide content from a *file listing* using "..." or by adding comments like "... rest of code..."!"
