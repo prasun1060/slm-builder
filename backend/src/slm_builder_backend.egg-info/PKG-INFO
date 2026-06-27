@@ -2,8 +2,9 @@ Metadata-Version: 2.4
 Name: slm-builder-backend
 Version: 0.1.0
 Summary: Backend for SLM Builder - A drag-and-drop interface for building Small Language Models
-Author: SLM Builder Team
-Project-URL: Homepage, https://github.com/yourusername/slm-builder
+Author: Prasun Bhattacharyya
+Project-URL: Homepage, https://github.com/prasun1060/slm-builder
+Requires-Python: >=3.12
 Requires-Dist: fastapi>=0.104.0
 Requires-Dist: uvicorn[standard]>=0.27.0
 Requires-Dist: sqlalchemy>=2.0.0
