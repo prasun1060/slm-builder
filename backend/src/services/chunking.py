@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-
-@dataclass
-class Chunk:
-    text: str
-    index: int
+from ..schemas.schemas import Chunk
 
 
 def chunk_text(text: str, chunk_size: int = 500, chunk_overlap: int = 50) -> list[Chunk]:

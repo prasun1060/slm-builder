@@ -1,31 +1,46 @@
-"""Ollama HTTP client helpers."""
-
-from __future__ import annotations
-
-import os
-
 import httpx
-
+from typing import Any, Dict, List
+from httpx.exceptions import ConnectionError
 
 class OllamaUnavailableError(RuntimeError):
     pass
 
+class OllamaService:
+    def __init__(self, model_config: Dict[str, Any]):
+        self.base_url = model_config.get('base_url')
+        self.model_id = model_config.get('model_id')
+        if not self.base_url or not self.model_id:
+            raise ValueError("model_config must contain 'base_url' and 'model_id'")
 
-async def generate_answer(model_id: str, question: str, context: str) -> str:
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-    prompt = (
-        "Answer the question using only the context below. "
-        "If the context does not contain the answer, say you do not know.\n\n"
-        f"Context:\n{context}\n\nQuestion: {question}\n\nAnswer:"
-    )
-    payload = {"model": model_id, "prompt": prompt, "stream": False}
+    async def generate(self, prompt: str) -> str:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(f"{self.base_url}/generate", json={"prompt": prompt, "model": self.model_id})
+                response.raise_for_status()
+                return response.json().get('text')
+        except ConnectionError:
+            raise OllamaUnavailableError("Failed to connect to Ollama API")
+        except httpx.exceptions.RequestException as e:
+            raise RuntimeError(f"Error generating text: {e}")
 
-    try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.post(f"{base_url}/api/generate", json=payload)
-            response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise OllamaUnavailableError(str(exc)) from exc
+    async def get_embedding(self, text: str) -> List[float]:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(f"{self.base_url}/embed", json={"text": text, "model": self.model_id})
+                response.raise_for_status()
+                return response.json().get('embedding')
+        except ConnectionError:
+            raise OllamaUnavailableError("Failed to connect to Ollama API")
+        except httpx.exceptions.RequestException as e:
+            raise RuntimeError(f"Error getting embedding: {e}")
 
-    data = response.json()
-    return data.get("response", "").strip() or "I do not know."
+    async def health_check(self) -> bool:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{self.base_url}/health")
+                response.raise_for_status()
+                return response.json().get('status') == 'ok'
+        except ConnectionError:
+            raise OllamaUnavailableError("Failed to connect to Ollama API")
+        except httpx.exceptions.RequestException as e:
+            raise RuntimeError(f"Health check failed: {e}")

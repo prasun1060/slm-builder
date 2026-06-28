@@ -16,11 +16,13 @@ This guide provides the necessary constraints and standards for AI agents contri
 - **State-Driven:** Use explicit status fields (`PENDING`, `INDEXED`, `FAILED`) for data processing.
 
 ## 3. Folder Responsibilities
+- `backend`: Folder where all backend code sits
 - `backend/src/routers/`: HTTP endpoints, request/response validation.
 - `backend/src/services/`: Business logic and orchestration.
 - `backend/src/adapters/`: Translation between generic interfaces and provider SDKs.
 - `backend/src/schemas/`: Pydantic models for API and internal data transfer.
 - `backend/src/database.py`: SQLAlchemy models and session management.
+- `frontend`: Folder where all frontend code sits
 - `frontend/src/app/components/`: Small, reusable UI units.
 - `frontend/src/app/services/`: API communication and state management.
 

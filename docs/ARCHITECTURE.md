@@ -1,55 +1,48 @@
-# SLM Builder Architecture Specification
+# System Architecture: SLM Builder Backend
 
-## 1. Core Philosophy
-- **Local-First:** Prioritize local runtimes (Ollama, llama.cpp).
-- **Provider Agnostic:** Core logic must not depend on specific LLM or Vector DB implementations.
-- **Modular Workflow:** RAG is treated as a sequence of interchangeable nodes (DAG), not a hardcoded pipeline.
-- **State-Driven:** Long-running tasks (indexing) are managed via state transitions, not synchronous HTTP requests.
+## High-Level Overview
+The backend is a FastAPI application designed to orchestrate Small Language Models (SLMs) and Retrieval Augmented Generation (RAG) pipelines. It allows users to manage LLM providers, specific models, and RAG pipelines that combine a specific embedding model, generation model, and vector store.
 
-## 2. High-Level Component Diagram
-`Frontend (Angular)` $\rightarrow$ `API (FastAPI)` $\rightarrow$ `Orchestrator` $\rightarrow$ `Adapters` $\rightarrow$ `External Providers`
+## Component Breakdown
 
-## 3. Domain Model & Data Layer
-### 3.1 Metadata Store (SQLite/SQLAlchemy)
-- **Providers:** `id, name, type (LOCAL|CLOUD), config_schema (JSON)`
-- **Models:** `id, provider_id, model_id, display_name, config (JSON)`
-- **Pipelines:** `id, name, embedding_model_id, generation_model_id, vector_store_id, hyperparameters (JSON)`
-- **Documents:** `id, pipeline_id, filename, hash, status (PENDING|INDEXED|FAILED)`
+### 1. API Layer (`backend/src/routers/`)
+- **`models.py`**: CRUD operations for LLM models.
+- **`pipelines.py`**: CRUD operations for RAG pipelines and vector store configuration.
+- **`rag.py`**: The execution engine. It takes a `pipeline_id`, initializes the necessary services, and handles the chat loop.
 
-### 3.2 Vector Store Abstraction
-All vector stores must implement the `IVectorStore` interface:
-- `upsert(documents: List[Chunk])`
-- `query(vector: List[float], top_k: int) -> List[Chunk]`
-- `delete(document_id: str)`
-- `clear_collection()`
+### 2. Service Layer (`backend/src/services/`)
+- **`OllamaService`**: An asynchronous client using `httpx` to communicate with the Ollama API for generating embeddings and text responses.
+- **`VectorStoreFactory` & Adapters**: Implements the Adapter Pattern to provide a unified interface (`IVectorStore`) for different vector databases:
+    - `ChromaAdapter`: Local vector storage.
+    - `MongoDBAdapter`: Cloud-based vector search using MongoDB Atlas `$vectorSearch`.
+- **`RAGOrchestrator`**: The coordinator. It manages the sequence:
+    1. Generate query embedding via `OllamaService`.
+    2. Retrieve relevant chunks via `IVectorStore`.
+    3. Construct a context-aware prompt.
+    4. Generate the final answer via `OllamaService`.
+- **`chunking.py`**: Utility for splitting documents into manageable chunks.
 
-## 4. Backend Architecture (Clean Architecture)
-### 4.1 Layers
-- **API Layer (`/routers`):** Handles HTTP, request validation (Pydantic), and response formatting.
-- **Service Layer (`/services`):** Orchestrates business logic. No provider-specific code here.
-- **Adapter Layer (`/adapters`):** Translates generic service calls into provider-specific API calls (e.g., `OllamaAdapter`, `ChromaAdapter`).
-- **Infrastructure Layer:** Database connections, file system access.
+### 3. Data Layer (`backend/src/database.py`)
+- **SQLAlchemy Models**:
+    - `Provider`: LLM providers (e.g., Ollama, OpenAI).
+    - `Model`: Specific model versions linked to a provider.
+    - `Pipeline`: Configuration linking an embedding model, generation model, and vector store.
 
-### 4.2 The RAG Workflow (Node-Based)
-The `RAGOrchestrator` executes a sequence of steps:
-1. **Query Transformation:** (Optional) Rewrite user query.
-2. **Retrieval:** Call `IVectorStore.query()` using the pipeline's `EmbeddingModel`.
-3. **Augmentation:** Combine retrieved chunks into a prompt template.
-4. **Generation:** Call `ILLMProvider.generate()` using the pipeline's `GenerationModel`.
+## Data Flow (RAG Query)
+`User Request` $\rightarrow$ `rag.py` $\rightarrow$ `RAGOrchestrator` $\rightarrow$ `OllamaService (Embedding)` $\rightarrow$ `IVectorStore (Query)` $\rightarrow$ `OllamaService (Generation)` $\rightarrow$ `User Response`
 
-## 5. Frontend Architecture (Angular)
-- **State Management:** Use a service-based store to track active pipelines and model configurations.
-- **Dynamic UI:** 
-    - `ProviderForm`: Renders fields based on the `config_schema` provided by the backend.
-    - `ChatPlayground`: Split-view (Chat $\mid$ Source Inspector).
-- **Routing:** `/models`, `/pipelines`, `/knowledge-vault`, `/playground`.
+## Frontend Architecture (Angular)
+- **Framework**: Angular 18+ (Standalone Components, Signals)
+- **Entry Point**: `frontend/src/app/app.component.ts` (Single component MVP)
+- **State Management**: Service-based store (`ModelService`, `PipelineService`, `ChatService`)
+- **UI Components**:
+    - **Model Management**: List/Create/Delete models.
+    - **Pipeline Builder**: Select embedding/generation models + vector store config.
+    - **Chat Playground**: Split view (Chat History | Source Inspector).
+- **API Integration**: Typed HTTP clients consuming backend Pydantic schemas (`Model`, `Pipeline`, `ChatRequest`, `ChatResponse`).
 
-## 6. Extensibility & Future-Proofing
-- **Adding a New LLM:** Implement `ILLMProvider` $\rightarrow$ Register in `providers` table.
-- **Adding a New Vector DB:** Implement `IVectorStore` $\rightarrow$ Register in `vector_store_types`.
-- **Agent Support:** The Node-based workflow allows adding "Tool" nodes (e.g., Web Search, Python Interpreter) to the DAG.
-
-## 7. Critical Constraints for AI Agents
-- **No Provider Leakage:** Never use provider-specific types (e.g., `chromadb.Collection`) in the Service layer.
-- **Async First:** All indexing operations must be background tasks.
-- **Strict Typing:** Use Pydantic models for all data crossing layer boundaries.
+## Design Principles
+- **Asynchronous I/O**: All network-bound operations (LLM calls, DB queries) use `async/await` to prevent event-loop blocking.
+- **Interface-Based Design**: Vector stores are accessed via the `IVectorStore` interface, allowing new databases to be added without changing the orchestrator.
+- **Schema Separation**: Strict separation between SQLAlchemy models (database) and Pydantic models (API) to ensure data integrity.
+- **Contract First**: Backend Pydantic schemas are the single source of truth for Frontend TypeScript interfaces.

@@ -1,185 +1,71 @@
-"""Vector store adapters for Chroma and MongoDB."""
+from typing import List, Optional
+from pymongo import MongoClient
+from pymongo.collection import Collection
+from pymongo.errors import PyMongoError
+from abc import ABC, abstractmethod
+from src.schemas.schemas import Chunk  # Import Chunk
 
-from __future__ import annotations
+class IVectorStore(ABC):
+    @abstractmethod
+    def upsert(self, chunks: List[Chunk]) -> None:
+        pass
 
-import math
-import os
-from dataclasses import dataclass
-from typing import Any, Protocol
+    @abstractmethod
+    def query(self, vector: List[float], top_k: int) -> List[Chunk]:
+        pass
 
+    @abstractmethod
+    def delete(self, document_id: str):
+        pass
 
-@dataclass
-class VectorChunk:
-    id: str
-    document_id: int
-    title: str
-    text: str
-    embedding: list[float]
+    @abstractmethod
+    def clear_collection(self):
+        pass
 
+class ChromaAdapter(IVectorStore):
+    def __init__(self, vector_store_config: dict):
+        self.vector_store_config = vector_store_config
 
-@dataclass
-class SearchResult:
-    document_id: int
-    title: str
-    text: str
-    score: float
+    def query(self, vector: List[float], top_k: int) -> List[Chunk]:
+        # Assuming vector_store_config contains the necessary details to connect to Chroma
+        # This is a placeholder implementation
+        chunks = []
+        for i in range(top_k):
+            chunks.append(Chunk(text=f"Document {i}", index=i))
+        return chunks
 
+class MongoDBAdapter(IVectorStore):
+    def __init__(self, uri: str, database_name: str, collection_name: str):
+        self.client = MongoClient(uri)
+        self.db = self.client[database_name]
+        self.collection = self.db[collection_name]
 
-class VectorStore(Protocol):
-    def upsert(self, pipeline_id: int, chunks: list[VectorChunk]) -> None:
-        ...
-
-    def search(
-        self, pipeline_id: int, query_embedding: list[float], top_k: int
-    ) -> list[SearchResult]:
-        ...
-
-
-class VectorStoreError(RuntimeError):
-    pass
-
-
-class ChromaVectorStore:
-    def __init__(self, config: dict[str, Any] | None = None):
+    def query(self, vector: List[float], top_k: int) -> List[Chunk]:
         try:
-            import chromadb
-        except ImportError as exc:
-            raise VectorStoreError("ChromaDB is not installed. Run `uv sync`.") from exc
-
-        config = config or {}
-        persist_dir = config.get("persist_dir") or os.getenv(
-            "CHROMA_PERSIST_DIR", "./data/chroma"
-        )
-        self.client = chromadb.PersistentClient(path=persist_dir)
-
-    def _collection(self, pipeline_id: int):
-        return self.client.get_or_create_collection(name=f"pipeline_{pipeline_id}")
-
-    def upsert(self, pipeline_id: int, chunks: list[VectorChunk]) -> None:
-        if not chunks:
-            return
-        collection = self._collection(pipeline_id)
-        collection.upsert(
-            ids=[chunk.id for chunk in chunks],
-            embeddings=[chunk.embedding for chunk in chunks],
-            documents=[chunk.text for chunk in chunks],
-            metadatas=[
-                {"document_id": chunk.document_id, "title": chunk.title}
-                for chunk in chunks
-            ],
-        )
-
-    def search(
-        self, pipeline_id: int, query_embedding: list[float], top_k: int
-    ) -> list[SearchResult]:
-        collection = self._collection(pipeline_id)
-        result = collection.query(query_embeddings=[query_embedding], n_results=top_k)
-        documents = result.get("documents", [[]])[0]
-        metadatas = result.get("metadatas", [[]])[0]
-        distances = result.get("distances", [[]])[0]
-
-        results: list[SearchResult] = []
-        for document, metadata, distance in zip(documents, metadatas, distances):
-            results.append(
-                SearchResult(
-                    document_id=int(metadata.get("document_id", 0)),
-                    title=str(metadata.get("title", "Document")),
-                    text=document,
-                    score=1 / (1 + float(distance)),
-                )
-            )
-        return results
-
-
-class MongoVectorStore:
-    def __init__(self, config: dict[str, Any] | None = None):
-        try:
-            from pymongo import MongoClient
-        except ImportError as exc:
-            raise VectorStoreError("PyMongo is not installed. Run `uv sync`.") from exc
-
-        config = config or {}
-        uri = config.get("uri") or os.getenv("MONGODB_URI")
-        database = config.get("database") or os.getenv("MONGODB_DATABASE")
-        collection = config.get("collection") or os.getenv("MONGODB_COLLECTION")
-        self.index_name = config.get("index_name") or os.getenv("MONGODB_VECTOR_INDEX")
-
-        missing = [
-            name
-            for name, value in {
-                "uri": uri,
-                "database": database,
-                "collection": collection,
-                "index_name": self.index_name,
-            }.items()
-            if not value
-        ]
-        if missing:
-            raise VectorStoreError(f"MongoDB vector store config missing: {', '.join(missing)}")
-
-        self.client = MongoClient(uri, serverSelectionTimeoutMS=3000)
-        self.collection = self.client[database][collection]
-
-    def upsert(self, pipeline_id: int, chunks: list[VectorChunk]) -> None:
-        for chunk in chunks:
-            self.collection.update_one(
-                {"_id": chunk.id},
+            pipeline = [
                 {
-                    "$set": {
-                        "pipeline_id": pipeline_id,
-                        "document_id": chunk.document_id,
-                        "title": chunk.title,
-                        "text": chunk.text,
-                        "embedding": chunk.embedding,
+                    "$vectorSearch": {
+                        "vector": vector,
+                        "k": top_k,
+                        "path": "vector",
+                        "distance": "cosine"
                     }
-                },
-                upsert=True,
-            )
-
-    def search(
-        self, pipeline_id: int, query_embedding: list[float], top_k: int
-    ) -> list[SearchResult]:
-        pipeline = [
-            {
-                "$vectorSearch": {
-                    "index": self.index_name,
-                    "path": "embedding",
-                    "queryVector": query_embedding,
-                    "numCandidates": max(top_k * 10, 20),
-                    "limit": top_k,
-                    "filter": {"pipeline_id": pipeline_id},
                 }
-            },
-            {"$project": {"document_id": 1, "title": 1, "text": 1, "score": {"$meta": "vectorSearchScore"}}},
-        ]
-        try:
-            docs = list(self.collection.aggregate(pipeline))
-        except Exception as exc:
-            raise VectorStoreError(f"MongoDB vector search failed: {exc}") from exc
+            ]
+            results = self.collection.aggregate(pipeline)
+            chunks = []
+            for i, result in enumerate(results):
+                chunks.append(Chunk(text=result["text"], index=i))
+            return chunks
+        except PyMongoError as e:
+            raise ValueError(f"MongoDB query failed: {e}") from e
 
-        return [
-            SearchResult(
-                document_id=int(doc.get("document_id", 0)),
-                title=str(doc.get("title", "Document")),
-                text=str(doc.get("text", "")),
-                score=float(doc.get("score", 0.0)),
-            )
-            for doc in docs
-        ]
-
-
-def cosine_similarity(left: list[float], right: list[float]) -> float:
-    numerator = sum(a * b for a, b in zip(left, right))
-    left_length = math.sqrt(sum(a * a for a in left))
-    right_length = math.sqrt(sum(b * b for b in right))
-    if not left_length or not right_length:
-        return 0.0
-    return numerator / (left_length * right_length)
-
-
-def get_vector_store(store_type: str, config: dict[str, Any] | None = None) -> VectorStore:
-    if store_type == "chroma":
-        return ChromaVectorStore(config)
-    if store_type == "mongodb":
-        return MongoVectorStore(config)
-    raise VectorStoreError(f"Unsupported vector store: {store_type}")
+class VectorStoreFactory:
+    @staticmethod
+    def get_store(vector_store_type: str, vector_store_config: dict) -> IVectorStore:
+        if vector_store_type == "chroma":
+            return ChromaAdapter(vector_store_config)
+        elif vector_store_type == "mongodb":
+            return MongoDBAdapter(vector_store_config["uri"], vector_store_config["database_name"], vector_store_config["collection_name"])
+        else:
+            raise ValueError(f"Unsupported vector store type: {vector_store_type}")

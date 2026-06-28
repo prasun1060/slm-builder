@@ -4,7 +4,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.routers import models, pipelines, rag, vector_stores
+from src.routers import models, pipelines, rag
 from src.database import engine, Base
 
 os.makedirs("./data", exist_ok=True)
@@ -31,7 +31,6 @@ app.add_middleware(
 app.include_router(models.router, prefix="/api/models", tags=["models"])
 app.include_router(pipelines.router, prefix="/api/pipelines", tags=["pipelines"])
 app.include_router(rag.router, prefix="/api/rag", tags=["rag"])
-app.include_router(vector_stores.router, prefix="/api/vector-stores", tags=["vector-stores"])
 
 @app.get("/")
 async def root():

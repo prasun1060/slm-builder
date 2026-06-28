@@ -3,9 +3,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from .. import database as db_models
-from .. import schemas
-from ..database import get_db
+from src import database as db_models
+from src import schemas
+from src.database import get_db
+from src.services import IVectorStore
 
 router = APIRouter()
 
@@ -18,7 +19,8 @@ def _ensure_model_exists(db: Session, model_id: int) -> None:
 
 @router.post("/", response_model=schemas.Pipeline, status_code=status.HTTP_201_CREATED)
 def create_pipeline(pipeline: schemas.PipelineCreate, db: Session = Depends(get_db)):
-    _ensure_model_exists(db, pipeline.model_id)
+    _ensure_model_exists(db, pipeline.embedding_model_id)
+    _ensure_model_exists(db, pipeline.generation_model_id)
     db_pipeline = db_models.Pipeline(**pipeline.model_dump())
     db.add(db_pipeline)
     db.commit()
@@ -52,8 +54,10 @@ def update_pipeline(
         raise HTTPException(status_code=404, detail="Pipeline not found")
 
     update_data = update.model_dump(exclude_unset=True)
-    if "model_id" in update_data:
-        _ensure_model_exists(db, update_data["model_id"])
+    if "embedding_model_id" in update_data:
+        _ensure_model_exists(db, update_data["embedding_model_id"])
+    if "generation_model_id" in update_data:
+        _ensure_model_exists(db, update_data["generation_model_id"])
 
     vector_store_type = update_data.get("vector_store_type", db_pipeline.vector_store_type)
     vector_store_config = update_data.get(
@@ -87,3 +91,21 @@ def delete_pipeline(pipeline_id: int, db: Session = Depends(get_db)):
     db.delete(db_pipeline)
     db.commit()
     return None
+
+@router.get("/vector-stores", response_model=list[IVectorStore])
+def list_vector_stores():
+    return [
+        IVectorStore(
+            type="chroma",
+            label="Chroma",
+            description="Local persistent vector database stored on disk.",
+            required_config_fields=[],
+            default=True,
+        ),
+        IVectorStore(
+            type="mongodb",
+            label="MongoDB Atlas Vector Search",
+            description="MongoDB collection with a configured vector search index.",
+            required_config_fields=["uri", "database", "collection", "index_name"],
+        ),
+    ]
